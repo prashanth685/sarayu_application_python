@@ -15,6 +15,7 @@ from dashboard.components.frequencyplot import FrequencyPlot
 from dashboard.components.tree_view import TreeView
 from dashboard.components.console import Console
 from dashboard.components.mqtt_status import MQTTStatus
+from dashboard.responsive import MediaQueryManager, ResponsiveMixin, Breakpoint
 from mqtthandler import MQTTHandler
 from features.tabular_view import TabularViewFeature
 from features.polar import PolarPlotFeature
@@ -59,7 +60,7 @@ class Worker(QObject):
         finally:
             self.finished.emit()
 
-class DashboardWindow(QWidget):
+class DashboardWindow(QWidget, ResponsiveMixin):
     mqtt_status_changed = pyqtSignal(bool)
     project_changed = pyqtSignal(str)
     saving_state_changed = pyqtSignal(bool)
@@ -69,6 +70,8 @@ class DashboardWindow(QWidget):
     
     def __init__(self, db, email, auth_window=None):
         super().__init__()
+        QWidget.__init__(self)  # Initialize QWidget
+        ResponsiveMixin.__init__(self)  # Initialize ResponsiveMixin
         self.db = db
         self.email = email
         self.auth_window = auth_window
@@ -97,9 +100,203 @@ class DashboardWindow(QWidget):
         self._debounce_timers = {}
         self._debounce_payloads = {}
 
+        # Initialize media query manager
+        self.media_query_manager = MediaQueryManager(self)
+        self.set_media_query_manager(self.media_query_manager)
+        self.setup_responsive_behaviors()
+
         self.initUI()
         self.deferred_initialization()
 
+    def setup_responsive_behaviors(self):
+        """Setup responsive behaviors for different breakpoints"""
+        # Connect to media query signals
+        self.media_query_manager.breakpoint_changed.connect(self.on_breakpoint_changed)
+        self.media_query_manager.entered_extra_small.connect(self.on_extra_small)
+        self.media_query_manager.entered_small.connect(self.on_small)
+        self.media_query_manager.entered_medium.connect(self.on_medium)
+        self.media_query_manager.entered_large.connect(self.on_large)
+        self.media_query_manager.entered_extra_large.connect(self.on_extra_large)
+        self.media_query_manager.entered_extra_extra_large.connect(self.on_extra_extra_large)
+        
+        # Start monitoring window resize events
+        self.media_query_manager.start_monitoring()
+        
+        # Setup responsive styles for different breakpoints
+        self.setup_responsive_styles()
+    
+    def setup_responsive_styles(self):
+        """Setup responsive styles for different breakpoints"""
+        # Extra small screens (mobile)
+        self.add_responsive_style(Breakpoint.EXTRA_SMALL, """
+            QToolBar { font-size: 14px; }
+            QToolButton { font-size: 10px; padding: 3px; min-width: 40px; }
+            QPushButton { font-size: 12px; padding: 4px 8px; }
+        """)
+        
+        # Small screens (tablet portrait)
+        self.add_responsive_style(Breakpoint.SMALL, """
+            QToolBar { font-size: 15px; }
+            QToolButton { font-size: 11px; padding: 4px; min-width: 45px; }
+            QPushButton { font-size: 13px; padding: 5px 10px; }
+        """)
+        
+        # Medium screens (tablet landscape)
+        self.add_responsive_style(Breakpoint.MEDIUM, """
+            QToolBar { font-size: 16px; }
+            QToolButton { font-size: 12px; padding: 5px; min-width: 50px; }
+            QPushButton { font-size: 14px; padding: 6px 12px; }
+        """)
+        
+        # Large screens and above (desktop)
+        for bp in [Breakpoint.LARGE, Breakpoint.EXTRA_LARGE, Breakpoint.EXTRA_EXTRA_LARGE]:
+            self.add_responsive_style(bp, """
+                QToolBar { font-size: 18px; }
+                QToolButton { font-size: 14px; padding: 8px 12px; min-width: 60px; }
+                QPushButton { font-size: 16px; padding: 8px 16px; }
+            """)
+    
+    def on_breakpoint_changed(self, old_breakpoint, new_breakpoint):
+        """Handle breakpoint change"""
+        logging.info(f"Dashboard breakpoint changed: {old_breakpoint} -> {new_breakpoint}")
+        self.update_responsive_layout()
+    
+    def on_extra_small(self):
+        """Handle extra small screen size"""
+        logging.info("Entered extra small breakpoint")
+        self.collapse_sidebar_for_mobile()
+        self.adjust_toolbar_for_mobile()
+    
+    def on_small(self):
+        """Handle small screen size"""
+        logging.info("Entered small breakpoint")
+        self.collapse_sidebar_for_mobile()
+        self.adjust_toolbar_for_small()
+    
+    def on_medium(self):
+        """Handle medium screen size"""
+        logging.info("Entered medium breakpoint")
+        self.expand_sidebar_for_desktop()
+        self.adjust_toolbar_for_desktop()
+    
+    def on_large(self):
+        """Handle large screen size"""
+        logging.info("Entered large breakpoint")
+        self.expand_sidebar_for_desktop()
+        self.adjust_toolbar_for_desktop()
+    
+    def on_extra_large(self):
+        """Handle extra large screen size"""
+        logging.info("Entered extra large breakpoint")
+        self.expand_sidebar_for_desktop()
+        self.adjust_toolbar_for_desktop()
+    
+    def on_extra_extra_large(self):
+        """Handle extra extra large screen size"""
+        logging.info("Entered extra extra large breakpoint")
+        self.expand_sidebar_for_desktop()
+        self.adjust_toolbar_for_desktop()
+    
+    def update_responsive_layout(self):
+        """Update layout based on current breakpoint"""
+        if not hasattr(self, 'media_query_manager'):
+            return
+            
+        breakpoint = self.media_query_manager.get_current_breakpoint()
+        if not breakpoint:
+            return
+        
+        # Update sidebar width
+        if hasattr(self, 'tree_container'):
+            new_width = self.media_query_manager.get_sidebar_width()
+            if self.sidebar_collapsed:
+                new_width = 50
+            self.tree_container.setFixedWidth(new_width)
+            self.update_splitter_sizes()
+        
+        # Update toolbar height
+        if hasattr(self, 'tool_bar'):
+            new_height = self.media_query_manager.get_toolbar_height()
+            self.tool_bar.setFixedHeight(new_height)
+        
+        # Update console height
+        if hasattr(self, 'console_container'):
+            new_height = self.media_query_manager.get_console_height()
+            if not self.console_container.height() == 80:  # Only if not maximized
+                self.console_container.setFixedHeight(new_height)
+        
+        # Update grid layout for main section
+        if hasattr(self, 'main_section'):
+            new_layout = self.media_query_manager.get_grid_layout()
+            if hasattr(self.main_section, 'current_layout'):
+                self.main_section.current_layout = new_layout
+                self.main_section.arrange_layout()
+    
+    def collapse_sidebar_for_mobile(self):
+        """Collapse sidebar for mobile devices"""
+        if not self.sidebar_collapsed:
+            self.sidebar_collapsed = True
+            self.update_sidebar()
+    
+    def expand_sidebar_for_desktop(self):
+        """Expand sidebar for desktop devices"""
+        if self.sidebar_collapsed and self.media_query_manager.is_desktop():
+            self.sidebar_collapsed = False
+            self.update_sidebar()
+    
+    def adjust_toolbar_for_mobile(self):
+        """Adjust toolbar for mobile devices"""
+        if hasattr(self, 'tool_bar'):
+            self.tool_bar.setStyleSheet("""
+                QToolBar { 
+                    background-color: #3C3F41;
+                    border: none; 
+                    padding: 2px; 
+                    spacing: 5px; 
+                }
+                QToolButton {
+                    color: white;
+                    font-size: 9px;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 3px;
+                    padding: 2px;
+                    min-width: 35px;
+                    min-height: 35px;
+                }
+                QToolButton:hover { background-color: #4a90e2; }
+                QToolButton:pressed { background-color: #357abd; }
+            """)
+    
+    def adjust_toolbar_for_small(self):
+        """Adjust toolbar for small screens"""
+        if hasattr(self, 'tool_bar'):
+            self.tool_bar.setStyleSheet("""
+                QToolBar { 
+                    background-color: #3C3F41;
+                    border: none; 
+                    padding: 3px; 
+                    spacing: 8px; 
+                }
+                QToolButton {
+                    color: white;
+                    font-size: 10px;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 3px;
+                    min-width: 40px;
+                    min-height: 40px;
+                }
+                QToolButton:hover { background-color: #4a90e2; }
+                QToolButton:pressed { background-color: #357abd; }
+            """)
+    
+    def adjust_toolbar_for_desktop(self):
+        """Adjust toolbar for desktop devices"""
+        if hasattr(self, 'tool_bar'):
+            self.tool_bar.update_toolbar()  # Use existing method
+    
     def initUI(self):
         self.setWindowTitle('Sarayu Desktop Application')
         self.setWindowState(Qt.WindowMaximized)
@@ -394,8 +591,17 @@ class DashboardWindow(QWidget):
 
     def resizeEvent(self, event):
         """Handle window resize events to maintain proper layout."""
+        # Call the media query manager's resize handling
+        if hasattr(self, 'media_query_manager'):
+            # The media query manager will handle breakpoint detection
+            pass
+        
+        # Call the original resize event handling
         super().resizeEvent(event)
         self.update_splitter_sizes()
+        
+        # Update responsive layout
+        self.update_responsive_layout()
 
     def on_channel_selected(self, model_name, channel_name):
         """Handle channel selection from TreeView."""

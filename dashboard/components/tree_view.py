@@ -2,14 +2,17 @@ from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMessageBox, QWidget, 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor
 import logging
+from dashboard.responsive import ResponsiveMixin, Breakpoint
 
-class TreeView(QWidget):
+class TreeView(QWidget, ResponsiveMixin):
     model_selected = pyqtSignal(str)
     channel_selected = pyqtSignal(str, str)
     feature_requested = pyqtSignal(str, str, str)  # feature_name, model_name, channel_name
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        QWidget.__init__(self)  # Initialize QWidget
+        ResponsiveMixin.__init__(self)  # Initialize ResponsiveMixin
         self.db = parent.db
         self.parent_widget = parent
         self.project_name = None
@@ -18,6 +21,7 @@ class TreeView(QWidget):
         self.selected_model = None
         self.initUI()
         self.parent_widget.project_changed.connect(self.update_project)
+        self.setup_responsive_styles()
 
     def initUI(self):
         self.tree = QTreeWidget()
@@ -38,6 +42,67 @@ class TreeView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.tree)
         self.setLayout(layout)
+    
+    def setup_responsive_styles(self):
+        """Setup responsive styles for different breakpoints"""
+        # Extra small screens (mobile)
+        self.add_responsive_style(Breakpoint.EXTRA_SMALL, """
+            QTreeWidget { 
+                background-color: #232629; 
+                color: #ecf0f1; 
+                border: none; 
+                font-size: 12px; 
+            }
+            QTreeWidget::item { 
+                padding: 4px; 
+                border-bottom: 1px solid #2c3e50; 
+                min-height: 20px;
+            }
+            QTreeWidget::item:hover { background-color: #34495e; }
+            QTreeWidget::item:selected { background-color: #4a90e2; color: white; }
+        """)
+        
+        # Small screens (tablet portrait)
+        self.add_responsive_style(Breakpoint.SMALL, """
+            QTreeWidget { 
+                background-color: #232629; 
+                color: #ecf0f1; 
+                border: none; 
+                font-size: 14px; 
+            }
+            QTreeWidget::item { 
+                padding: 6px; 
+                border-bottom: 1px solid #2c3e50; 
+                min-height: 24px;
+            }
+            QTreeWidget::item:hover { background-color: #34495e; }
+            QTreeWidget::item:selected { background-color: #4a90e2; color: white; }
+        """)
+        
+        # Medium screens and above (tablet landscape, desktop)
+        for bp in [Breakpoint.MEDIUM, Breakpoint.LARGE, Breakpoint.EXTRA_LARGE, Breakpoint.EXTRA_EXTRA_LARGE]:
+            self.add_responsive_style(bp, """
+                QTreeWidget { 
+                    background-color: #232629; 
+                    color: #ecf0f1; 
+                    border: none; 
+                    font-size: 16px; 
+                }
+                QTreeWidget::item { 
+                    padding: 8px; 
+                    border-bottom: 1px solid #2c3e50; 
+                    min-height: 28px;
+                }
+                QTreeWidget::item:hover { background-color: #34495e; }
+                QTreeWidget::item:selected { background-color: #4a90e2; color: white; }
+            """)
+    
+    def update_responsive_width(self, width):
+        """Update tree view width based on responsive design"""
+        self.setFixedWidth(width)
+        self.tree.setFixedWidth(width)
+        self.setMinimumWidth(width)
+        self.setMaximumWidth(width)
 
     def update_project(self, project_name):
         self.project_name = project_name

@@ -3,16 +3,23 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import QSize, Qt, pyqtSignal
 import logging
 import qtawesome as qta
+from dashboard.responsive import ResponsiveMixin, Breakpoint
 
 
-class ToolBar(QToolBar):
+class ToolBar(QToolBar, ResponsiveMixin):
     feature_selected = pyqtSignal(str)
 
     def __init__(self, parent):
         super().__init__("Features", parent)
+        QToolBar.__init__(self)  # Initialize QToolBar
+        ResponsiveMixin.__init__(self)  # Initialize ResponsiveMixin
         self.parent = parent
         self.initUI()
         self.parent.project_changed.connect(self.update_project_status)
+        
+        # Setup responsive behaviors
+        if hasattr(parent, 'media_query_manager'):
+            self.set_media_query_manager(parent.media_query_manager)
 
     def initUI(self):
         self.setFixedHeight(80)
@@ -23,23 +30,48 @@ class ToolBar(QToolBar):
 
     def update_toolbar(self):
         self.clear()
-        self.setStyleSheet("""
-            QToolBar { 
+        
+        # Get responsive height based on breakpoint
+        height = 80  # default
+        if hasattr(self, '_media_query_manager') and self._media_query_manager:
+            height = self._media_query_manager.get_toolbar_height()
+        self.setFixedHeight(height)
+        
+        # Get responsive styles
+        font_size = 11
+        button_size = 64
+        icon_size = 24
+        text_font_size = 10
+        
+        if hasattr(self, '_media_query_manager') and self._media_query_manager:
+            breakpoint = self._media_query_manager.get_current_breakpoint()
+            if breakpoint == Breakpoint.EXTRA_SMALL:
+                font_size = 9
+                button_size = 50
+                icon_size = 20
+                text_font_size = 8
+            elif breakpoint == Breakpoint.SMALL:
+                font_size = 10
+                button_size = 56
+                icon_size = 22
+                text_font_size = 9
+        self.setStyleSheet(f"""
+            QToolBar {{ 
                 background-color: #3C3F41;
                 border: none; 
                 padding: 5px; 
                 spacing: 10px; 
-            }
-            QToolButton {
+            }}
+            QToolButton {{
                 color: white;
-                font-size: 11px;
+                font-size: {font_size}px;
                 font-weight: bold;
                 border: none;
                 border-radius: 5px;
                 padding: 5px;
-            }
-            QToolButton:hover { background-color: #4a90e2; }
-            QToolButton:pressed { background-color: #357abd; }
+            }}
+            QToolButton:hover {{ background-color: #4a90e2; }}
+            QToolButton:pressed {{ background-color: #357abd; }}
         """)
         self.setMovable(False)
         self.setFloatable(False)
@@ -90,19 +122,19 @@ class ToolBar(QToolBar):
             button = QToolButton()
             button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
             button.setToolTip(tooltip)
-            button.setFixedSize(64, 64)
+            button.setFixedSize(button_size, button_size)
 
             # Use qtawesome to get an icon
             icon = qta.icon(fa_icon, color=color)
             button.setIcon(icon)
-            button.setIconSize(QSize(24, 24))
+            button.setIconSize(QSize(icon_size, icon_size))
 
             # Text label for the button
             text_label = QLabel(feature_name)
             text_label.setWordWrap(True)
             text_label.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
-            text_label.setStyleSheet("font-size: 10px; color: white; font-weight: bold;")
-            text_label.setFixedSize(60, 24)
+            text_label.setStyleSheet(f"font-size: {text_font_size}px; color: white; font-weight: bold;")
+            text_label.setFixedSize(button_size - 4, 24)
 
             # Layout for button
             layout = QVBoxLayout()

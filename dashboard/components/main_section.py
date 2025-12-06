@@ -1,10 +1,13 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QMdiArea, QScrollArea, QMdiSubWindow
 from PyQt5.QtCore import Qt
 import logging
+from dashboard.responsive import ResponsiveMixin, Breakpoint
 
-class MainSection(QWidget):
+class MainSection(QWidget, ResponsiveMixin):
     def __init__(self, parent=None):
         super().__init__(parent)
+        QWidget.__init__(self)  # Initialize QWidget
+        ResponsiveMixin.__init__(self)  # Initialize ResponsiveMixin
         self.parent = parent
         self.current_widget = None
         self.current_layout = "2x2"
@@ -16,6 +19,11 @@ class MainSection(QWidget):
             self.parent.sidebar_toggled.connect(self.on_sidebar_toggled)
         # Store the last known viewport size
         self.last_viewport_size = self.scroll_area.viewport().size()
+        
+        # Setup responsive behaviors
+        if hasattr(parent, 'media_query_manager'):
+            self.set_media_query_manager(parent.media_query_manager)
+            self.setup_responsive_layout()
 
     def initUI(self):
         self.layout = QVBoxLayout()
@@ -44,6 +52,26 @@ class MainSection(QWidget):
         self.scroll_area.setWidget(self.mdi_area)
         self.layout.addWidget(self.scroll_area)
         self.setLayout(self.layout)
+    
+    def setup_responsive_layout(self):
+        """Setup responsive layout behaviors"""
+        if not hasattr(self, '_media_query_manager') or not self._media_query_manager:
+            return
+        
+        # Connect to breakpoint changes
+        self._media_query_manager.breakpoint_changed.connect(self.on_breakpoint_changed)
+        
+        # Set initial layout based on current breakpoint
+        current_layout = self._media_query_manager.get_grid_layout()
+        self.current_layout = current_layout
+    
+    def on_breakpoint_changed(self, old_breakpoint, new_breakpoint):
+        """Handle breakpoint change"""
+        if hasattr(self, '_media_query_manager') and self._media_query_manager:
+            new_layout = self._media_query_manager.get_grid_layout()
+            if new_layout != self.current_layout:
+                self.current_layout = new_layout
+                self.arrange_layout()
 
     def on_project_changed(self, project_name):
         if not project_name:
